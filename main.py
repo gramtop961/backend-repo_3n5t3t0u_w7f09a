@@ -13,12 +13,16 @@ from schemas import RegisterRequest, LoginRequest, TokenResponse
 # App setup
 app = FastAPI()
 
+# CORS: use explicit configuration to ensure header is present even for errors
+frontend_origin = os.getenv("FRONTEND_URL")
+allowed_origins = [frontend_origin] if frontend_origin else ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=allowed_origins,
+    allow_credentials=False,  # Use False so Access-Control-Allow-Origin can be "*"
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["*"]
 )
 
 # Security / JWT config
@@ -143,6 +147,8 @@ def get_current_user(authorization: Optional[str] = Header(None)):
         email: str = payload.get("sub")
         if email is None:
             raise HTTPException(status_code=401, detail="Invalid token")
+        if db is None:
+            raise HTTPException(status_code=500, detail="Database not available")
         user = db["authuser"].find_one({"email": email})
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
@@ -154,6 +160,27 @@ def get_current_user(authorization: Optional[str] = Header(None)):
 @app.get("/auth/me")
 def me(current=Depends(get_current_user)):
     return current
+
+
+# Example protected domain route for dashboard
+@app.get("/dashboard")
+def dashboard(current=Depends(get_current_user)):
+    # This can later be expanded to real portfolio/orders data
+    return {
+        "greeting": f"Welcome back, {current['name'] or current['email']}!",
+        "shortcuts": [
+            {"label": "Portfolio", "href": "/portfolio"},
+            {"label": "Orders", "href": "/orders"},
+            {"label": "Settings", "href": "/settings"}
+        ],
+        "widgets": {
+            "balanceUSD": 12543.27,
+            "holdings": [
+                {"symbol": "BTC", "amount": 0.42, "value": 11234.11},
+                {"symbol": "ETH", "amount": 3.5, "value": 1309.16}
+            ]
+        }
+    }
 
 
 if __name__ == "__main__":
